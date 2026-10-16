@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghar Direct admin</title>
+<style>
+  body{font:15px/1.5 system-ui,sans-serif;margin:0;padding:24px;max-width:900px;margin-inline:auto;color:#1d1030;background:#f6f3ff}
+  h1{margin:0 0 4px}
+  input,button{font:inherit;padding:8px 12px;border:2px solid #1d1030;border-radius:10px;background:#fff}
+  button{cursor:pointer;font-weight:600}
+  .card{background:#fff;border:2px solid #1d1030;border-radius:14px;padding:14px;margin:12px 0}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .tag{display:inline-block;background:#ffe066;border:1.5px solid #1d1030;border-radius:8px;padding:0 8px;font-size:.8rem}
+  small{color:#5e5278}
+  #msg{color:#b3261e}
+</style>
+</head>
+<body>
+<h1>Reports</h1>
+<p><small>Review what people have reported. Actions take effect at once.</small></p>
+<form id="login">
+  <input id="token" type="password" placeholder="Admin token" autocomplete="off" aria-label="Admin token">
+  <button type="submit">Load reports</button>
+  <label><input id="all" type="checkbox"> include closed</label>
+</form>
+<p id="msg"></p>
+<div id="list"></div>
+<script>
+(function(){
+  var token='';
+  var list=document.getElementById('list'),msg=document.getElementById('msg');
+  var REASON={fake_listing:'Fake listing or photos',broker:'Broker pretending to be the owner',asked_money:'Asked for money before a visit',abusive:'Rude or creepy messages',discrimination:'Discrimination',other:'Something else'};
+  function el(tag,text,cls){var e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e}
+  function api(path,opts){
+    opts=opts||{};opts.headers=Object.assign({'x-admin-token':token,'content-type':'application/json'},opts.headers||{});
+    return fetch(path,opts).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.message||'Request failed');return j})});
+  }
+  function act(id,action){
+    api('/admin/api/reports/'+encodeURIComponent(id)+'/resolve',{method:'POST',body:JSON.stringify({action:action})}).then(load).catch(function(e){msg.textContent=e.message});
+  }
+  function render(reports){
+    list.textContent='';
+    if(!reports.length){list.appendChild(el('p','Nothing to review.'));return}
+    reports.forEach(function(r){
+      var c=el('div',undefined,'card');
+      c.appendChild(el('b',REASON[r.reason]||r.reason));
+      c.appendChild(document.createTextNode(' '));
+      c.appendChild(el('span',r.status,'tag'));
+      c.appendChild(el('p','Against '+r.target.name+' ('+r.target.email+')'+(r.target.banned?' [banned]':'')+', reported by '+r.reporter));
+      if(r.listing)c.appendChild(el('p','Listing in '+r.listing.locality+' ('+r.listing.status+')'));
+      if(r.details)c.appendChild(el('p','"'+r.details+'"'));
+      c.appendChild(el('small',new Date(r.createdAt).toLocaleString()));
+      var row=el('div',undefined,'row');
+      [['Dismiss','dismiss'],['Remove listing','remove_listing'],['Restore listings','restore_listing'],['Ban user','ban_user']].forEach(function(a){
+        var b=el('button',a[0]);b.type='button';b.addEventListener('click',function(){act(r.id,a[1])});row.appendChild(b);
+      });
+      c.appendChild(row);list.appendChild(c);
+    });
+  }
+  function load(){
+    msg.textContent='';
+    api('/admin/api/reports'+(document.getElementById('all').checked?'?status=all':'')).then(function(j){render(j.reports)}).catch(function(e){msg.textContent=e.message});
+  }
+  document.getElementById('login').addEventListener('submit',function(e){e.preventDefault();token=document.getElementById('token').value;load()});
+})();
+</script>
+</body>
+</html>
